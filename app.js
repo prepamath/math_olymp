@@ -10,6 +10,9 @@ let estProfesseur = false;
 let CONTENU_SITE = {};
 let progressionEleve = {};
 let sectionActuelle = "algebre";
+let statsSite = {};
+let pageStatsActive = false;
+let minuteurExercice = null;
 
 // Variables pour l'éditeur visuel du professeur
 let adminFullData = null;
@@ -73,8 +76,7 @@ async function initialiserSession(user) {
     }
 
     sectionActuelle = Object.keys(CONTENU_SITE)[0];
-    await chargerProgressionEleve();
-    construireBarreNavigation();
+    await Promise.all([chargerProgressionEleve(), chargerStatistiques()]);
     afficherSection(sectionActuelle);
 }
 
@@ -130,11 +132,16 @@ function construireBarreNavigation() {
     nav.innerHTML = '';
     for (const key in CONTENU_SITE) {
         const btn = document.createElement('button');
-        btn.className = `nav-btn ${key === sectionActuelle ? 'active' : ''}`;
+        btn.className = `nav-btn ${key === sectionActuelle && !pageStatsActive ? 'active' : ''}`;
         btn.textContent = CONTENU_SITE[key].titre;
         btn.onclick = () => afficherSection(key);
         nav.appendChild(btn);
     }
+    const btnStats = document.createElement('button');
+    btnStats.className = `nav-btn ${pageStatsActive ? 'active' : ''}`;
+    btnStats.textContent = 'Statistiques';
+    btnStats.onclick = afficherStatistiques;
+    nav.appendChild(btnStats);
 }
 
 function chapitreEstComplete(chapId) {
@@ -167,49 +174,61 @@ function afficherSection(secKey) {
     if (!CONTENU_SITE[secKey]) secKey = Object.keys(CONTENU_SITE)[0];
     if (!secKey) return;
     sectionActuelle = secKey;
+    pageStatsActive = false;
     construireBarreNavigation();
     const section = CONTENU_SITE[secKey];
     const container = document.getElementById('main-container');
 
     let html = `
-        <div class="section-header">
-            <div class="breadcrumb">Théorie & Exercices > ${section.titre}</div>
-            <h1>${section.titre}</h1>
-            <p class="section-intro">${section.intro || ''}</p>
-        </div>
+        <h1 class="page-title"><span class="page-title-parent">Théorie &gt;</span> ${section.titre}</h1>
+        ${section.intro ? `<h3>Introduction</h3><p>${section.intro}</p>` : ''}
+        <h3>Chapitres</h3>
     `;
 
     (section.categories || []).forEach(cat => {
-        html += `<h2 class="category-title">${cat.nom}</h2><p class="category-subtitle">${cat.sousTitre || ''}</p>`;
+        html += `<h4 class="category-title">${cat.nom}</h4><p>${cat.sousTitre || ''}</p>`;
         (cat.chapitres || []).forEach(chap => {
             const prerequisOk = !chap.prerequis || chapitreEstComplete(chap.prerequis);
-            const nomPrerequis = chap.prerequis ? trouverTitreChapitre(chap.prerequis) : '';
+            const exercices = chap.exercices || [];
+            const resolus = exercices.filter(exo => progressionEleve[exo.id]?.est_correct);
+            const couleur = !prerequisOk ? 'greyy' : (exercices.length > 0 && resolus.length === exercices.length ? 'greeny' : 'yellowy');
+            const points = resolus.reduce((total, exo) => total + exo.points, 0);
+            const pointsTotal = exercices.reduce((total, exo) => total + exo.points, 0);
 
             html += `
-                <div class="chapter-card">
-                    <div class="chapter-header">
-                        <h3 class="chapter-title">${chap.titre}</h3>
-                        ${!prerequisOk ? `<span class="prereq-badge">🔒 Prérequis : ${nomPrerequis}</span>` : ''}
+                <div class="chapter-card ${couleur}">
+                    <div class="chapter-title-bar">
+                        <a class="chapter-title" onclick="ouvrirChapitre('${secKey}', '${chap.id}')">${chap.titre}</a>
                     </div>
-                    <p class="chapter-desc">${chap.description || ''}</p>
-                    <div class="chapter-grid">
-                        <div>
-                            <div class="grid-col-title">Points théoriques</div>
-                            <div class="theory-list">
-                                ${(chap.theorie || []).length === 0 ? `<span style="color:var(--text-muted);font-size:0.85rem;">Aucun cours pour le moment</span>` : ''}
-                                ${(chap.theorie || []).map(th => `<a class="theory-link" onclick="afficherTheorie('${secKey}', '${chap.id}', '${th.id}')">📘 ${th.titre}</a>`).join('')}
+                    <div class="chapter-body">
+                        <p>${chap.description || ''}</p>
+                        ${!prerequisOk ? `<p><b>Pour pouvoir accéder aux exercices de ce chapitre, vous devez d'abord compléter : <i>${trouverTitreChapitre(chap.prerequis)}</i></b></p>` : ''}
+                        <div class="chapter-modules">
+                            <div class="module">
+                                <h5>Théorie</h5>
+                                ${(chap.theorie || []).length === 0 ? `<p class="module-vide">Aucun cours pour le moment</p>` : `
+                                    <ul>
+                                        ${chap.theorie.map(th => `<li><a onclick="afficherTheorie('${secKey}', '${chap.id}', '${th.id}')">${th.titre}</a></li>`).join('')}
+                                    </ul>
+                                `}
                             </div>
-                        </div>
-                        <div>
-                            <div class="grid-col-title">Exercices</div>
-                            <div class="exo-pills">
-                                ${(chap.exercices || []).length === 0 ? `<span style="color:var(--text-muted);font-size:0.85rem;">Aucun exercice</span>` : ''}
-                                ${(chap.exercices || []).map(exo => {
-                                    const statut = progressionEleve[exo.id];
-                                    let classeStatut = !prerequisOk ? 'locked' : (statut?.est_correct ? 'solved' : (statut ? 'failed' : ''));
-                                    const actionClic = prerequisOk ? `onclick="afficherExercice('${secKey}', '${chap.id}', '${exo.id}')"` : `title="Terminez d'abord : ${nomPrerequis}"`;
-                                    return `<div class="exo-pill ${classeStatut}" ${actionClic}>${exo.numero}</div>`;
-                                }).join('')}
+                            <div class="module">
+                                <h5>Exercices</h5>
+                                ${exercices.length === 0 ? `<p class="module-vide">Aucun exercice</p>` : `
+                                    <div class="exo-pills">
+                                        ${exercices.map(exo => {
+                                            const statut = progressionEleve[exo.id];
+                                            const classeStatut = !prerequisOk ? 'locked' : (statut?.est_correct ? 'solved' : (statut ? 'failed' : ''));
+                                            const actionClic = prerequisOk ? `onclick="afficherExercice('${secKey}', '${chap.id}', '${exo.id}')"` : `title="Terminez d'abord : ${echapperAttr(trouverTitreChapitre(chap.prerequis))}"`;
+                                            return `<div class="exo-pill ${classeStatut}" ${actionClic}>${exo.numero}</div>`;
+                                        }).join('')}
+                                    </div>
+                                `}
+                            </div>
+                            <div class="module">
+                                <h5>Ma progression</h5>
+                                <p>Résolus : <b>${resolus.length}/${exercices.length}</b></p>
+                                <p>Points : <b>${points}/${pointsTotal}</b></p>
                             </div>
                         </div>
                     </div>
@@ -222,17 +241,60 @@ function afficherSection(secKey) {
     rendreLatex();
 }
 
-function afficherTheorie(secKey, chapId, thId) {
+function ouvrirChapitre(secKey, chapId) {
     const chap = trouverObjetChapitre(secKey, chapId);
-    const th = chap.theorie.find(t => t.id === thId);
+    const prerequisOk = !chap.prerequis || chapitreEstComplete(chap.prerequis);
+    if ((chap.theorie || []).length > 0) afficherTheorie(secKey, chapId, chap.theorie[0].id);
+    else if (prerequisOk && (chap.exercices || []).length > 0) afficherExercice(secKey, chapId, chap.exercices[0].id);
+}
+
+function menuChapitre(secKey, chap, idActif) {
+    const prerequisOk = !chap.prerequis || chapitreEstComplete(chap.prerequis);
+    const theorie = (chap.theorie || []).map(th => `
+        <a class="side-item ${th.id === idActif ? 'active' : ''}" onclick="afficherTheorie('${secKey}', '${chap.id}', '${th.id}')">${th.titre}</a>
+    `).join('');
+    const exercices = (chap.exercices || []).map(exo => {
+        if (!prerequisOk) return `<span class="side-item locked">🔒 Exercice ${exo.numero}</span>`;
+        const statut = progressionEleve[exo.id];
+        const classeStatut = statut?.est_correct ? 'solved' : (statut ? 'failed' : '');
+        return `<a class="side-item ${classeStatut} ${exo.id === idActif ? 'active' : ''}" onclick="afficherExercice('${secKey}', '${chap.id}', '${exo.id}')">Exercice ${exo.numero}</a>`;
+    }).join('');
+
+    return `
+        ${theorie ? `<h5>Points théoriques</h5><div class="side-list">${theorie}</div>` : ''}
+        ${exercices ? `<h5>Exercices</h5><div class="side-list">${exercices}</div>` : ''}
+    `;
+}
+
+function afficherPageChapitre(secKey, chap, idActif, contenu) {
     document.getElementById('main-container').innerHTML = `
-        <button class="back-btn" onclick="afficherSection('${secKey}')">← Retour à la section ${CONTENU_SITE[secKey].titre}</button>
-        <div class="content-box">
-            <div class="breadcrumb">${chap.titre} — Point théorique</div>
-            ${th.contenu}
+        <h1 class="page-title">
+            <span class="page-title-parent">Théorie &gt; <a onclick="afficherSection('${secKey}')">${CONTENU_SITE[secKey].titre}</a> &gt;</span>
+            ${chap.titre}
+        </h1>
+        <div class="chapter-layout">
+            <aside id="chapter-menu">${menuChapitre(secKey, chap, idActif)}</aside>
+            <div class="chapter-main">${contenu}</div>
         </div>
     `;
     rendreLatex();
+}
+
+function afficherTheorie(secKey, chapId, thId) {
+    const chap = trouverObjetChapitre(secKey, chapId);
+    const th = chap.theorie.find(t => t.id === thId);
+    afficherPageChapitre(secKey, chap, thId, th.contenu);
+}
+
+function pastillesExercice(exo) {
+    const stats = statsSite.exos?.[exo.id];
+    return `
+        <span class="pill pill-grey">${exo.points} point${exo.points > 1 ? 's' : ''}</span>
+        ${stats ? `
+            <span class="pill pill-blue">Résolu ${stats.resolus} fois</span>
+            <span class="pill pill-green">${stats.taux}% au 1<sup>er</sup> essai</span>
+        ` : ''}
+    `;
 }
 
 function afficherExercice(secKey, chapId, exoId) {
@@ -243,10 +305,14 @@ function afficherExercice(secKey, chapId, exoId) {
 
     let zoneInteraction = '';
     if (exo.type === 'latex') {
-        zoneInteraction = `<math-field id="reponse-eleve" placeholder="\\text{Tapez votre réponse ici...}">${dejaReussi ? ancienneReponse : ''}</math-field>`;
+        zoneInteraction = `
+            <label class="answer-label">Votre réponse</label>
+            <math-field id="reponse-eleve">${dejaReussi ? ancienneReponse : ''}</math-field>
+        `;
     } else if (exo.type === 'qcm') {
         const lettres = ['A', 'B', 'C', 'D', 'E', 'F'];
         zoneInteraction = `
+            <label class="answer-label">Votre réponse</label>
             <div class="options-list">
                 ${(exo.options || []).map((opt, idx) => `
                     <div class="option-item ${dejaReussi && ancienneReponse === 'Choix_' + idx ? 'selected' : ''}" data-index="${idx}">
@@ -258,27 +324,105 @@ function afficherExercice(secKey, chapId, exoId) {
         `;
     }
 
-    document.getElementById('main-container').innerHTML = `
-        <button class="back-btn" onclick="afficherSection('${secKey}')">← Retour au chapitre "${chap.titre}"</button>
-        <div class="content-box">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                <span class="breadcrumb">${chap.titre} — Exercice ${exo.numero}</span>
-                <span class="score-badge">${exo.points} points</span>
-            </div>
-            <div style="font-size:1.2rem; margin-bottom:20px; line-height:1.6;">${exo.enonce}</div>
-            ${zoneInteraction}
-            <button class="btn-primary" id="btn-valider-exo">Vérifier la réponse</button>
-            <div id="feedback-exo" class="feedback-box ${dejaReussi ? 'correct' : ''}" style="${dejaReussi ? 'display:block' : ''}">
-                ${dejaReussi ? '✨ Vous avez déjà résolu cet exercice avec succès !' : ''}
-            </div>
+    afficherPageChapitre(secKey, chap, exoId, `
+        <div class="exo-header">
+            <h2>Exercice ${exo.numero}</h2>
+            <div class="pills" id="exo-pastilles">${pastillesExercice(exo)}</div>
         </div>
-    `;
+        <div class="exo-enonce">${exo.enonce}</div>
+        ${zoneInteraction}
+        <button class="btn-primary btn-soumettre" id="btn-valider-exo">Soumettre</button>
+        <span id="exo-tentatives" class="exo-tentatives"></span>
+        <div id="feedback-exo" class="feedback-box ${dejaReussi ? 'correct' : ''}" style="${dejaReussi ? 'display:block' : ''}">
+            ${dejaReussi ? '✨ Vous avez déjà résolu cet exercice avec succès !' : ''}
+        </div>
+    `);
 
-    rendreLatex();
-    attacherEvenementsExercice(exo);
+    attacherEvenementsExercice(secKey, chap, exo);
+    if (!dejaReussi) chargerEtatExercice(exo.id);
 }
 
-function attacherEvenementsExercice(exo) {
+async function chargerEtatExercice(exoId) {
+    const { data } = await db.rpc('etat_exercice', { p_exo_id: exoId });
+    if (data) appliquerEtatExercice(exoId, data);
+}
+
+function formaterAttente(secondes) {
+    const heures = Math.floor(secondes / 3600);
+    const minutes = Math.floor(secondes / 60) % 60;
+    if (heures > 0) return `${heures} h ${minutes} min`;
+    if (minutes > 0) return `${minutes} min ${secondes % 60} s`;
+    return `${secondes} s`;
+}
+
+function appliquerEtatExercice(exoId, etat) {
+    const btnValider = document.getElementById('btn-valider-exo');
+    const info = document.getElementById('exo-tentatives');
+    clearInterval(minuteurExercice);
+    if (!btnValider || !info) return;
+
+    btnValider.disabled = !!etat.bloque;
+    if (!etat.bloque) {
+        const restantes = etat.tentatives_restantes;
+        info.textContent = restantes ? `${restantes} tentative${restantes > 1 ? 's' : ''} avant la prochaine attente` : '';
+        return;
+    }
+
+    const fin = Date.now() + etat.secondes_restantes * 1000;
+    const actualiser = () => {
+        // L'élève a quitté la page de l'exercice
+        if (!info.isConnected) return clearInterval(minuteurExercice);
+        const secondes = Math.ceil((fin - Date.now()) / 1000);
+        if (secondes <= 0) {
+            clearInterval(minuteurExercice);
+            return chargerEtatExercice(exoId);
+        }
+        info.textContent = `⏳ Prochaine tentative dans ${formaterAttente(secondes)}`;
+    };
+    actualiser();
+    minuteurExercice = setInterval(actualiser, 1000);
+}
+
+async function chargerStatistiques() {
+    const { data } = await db.rpc('statistiques_site');
+    statsSite = data || {};
+}
+
+async function afficherStatistiques() {
+    pageStatsActive = true;
+    construireBarreNavigation();
+    await chargerStatistiques();
+    const podium = statsSite.podium || [];
+    const formater = nombre => (nombre || 0).toLocaleString('fr-FR');
+
+    document.getElementById('main-container').innerHTML = `
+        <h1 class="page-title">Statistiques</h1>
+        <div class="stats-box">
+            <div><b>${formater(statsSite.eleves_classes)}</b> élèves classés</div>
+            <div><b>${formater(statsSite.exercices_resolus)}</b> exercices résolus</div>
+            <div><b>${formater(statsSite.points_distribues)}</b> points distribués</div>
+        </div>
+        <h3>Meilleurs scores</h3>
+        <p>Le classement est anonyme : seul ton propre score est signalé.</p>
+        ${podium.length === 0 ? `<p class="module-vide">Aucun score pour le moment.</p>` : `
+            <table class="score-table">
+                <thead><tr><th>Rang</th><th>Élève</th><th>Score</th></tr></thead>
+                <tbody>
+                    ${podium.map(ligne => `
+                        <tr class="${ligne.moi ? 'score-moi' : ''}">
+                            <td>${ligne.rang}</td>
+                            <td>${ligne.moi ? 'Toi' : 'Élève anonyme'}</td>
+                            <td>${formater(ligne.score)} pts</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `}
+        <p>${statsSite.mon_rang ? `Ton rang : <b>${statsSite.mon_rang}</b> sur ${formater(statsSite.eleves_classes)}` : `Résous un exercice pour entrer dans le classement.`}</p>
+    `;
+}
+
+function attacherEvenementsExercice(secKey, chap, exo) {
     const btnValider = document.getElementById('btn-valider-exo');
     const feedback = document.getElementById('feedback-exo');
     let indexQcmChoisi = null;
@@ -316,13 +460,17 @@ function attacherEvenementsExercice(exo) {
             p_reponse_clean: reponseClean,
             p_reponse_brute: reponseBrute
         });
-        btnValider.textContent = "Vérifier la réponse";
+        btnValider.textContent = "Soumettre";
 
         if (error || !res) {
             return afficherFeedback(feedback, "Erreur lors de la vérification.", false);
         }
         if (res.error) {
             return afficherFeedback(feedback, res.error, false);
+        }
+        appliquerEtatExercice(exo.id, res.etat || {});
+        if (res.bloque) {
+            return afficherFeedback(feedback, "Trop de tentatives : votre réponse n'a pas été prise en compte.", false);
         }
 
         if (res.est_correct) {
@@ -331,7 +479,10 @@ function attacherEvenementsExercice(exo) {
             afficherFeedback(feedback, `Ce n'est pas la bonne réponse. ${res.indice ? '<br>💡 <b>Indice :</b> ' + res.indice : ''}`, false);
         }
 
-        await chargerProgressionEleve();
+        await Promise.all([chargerProgressionEleve(), chargerStatistiques()]);
+        document.getElementById('chapter-menu').innerHTML = menuChapitre(secKey, chap, exo.id);
+        document.getElementById('exo-pastilles').innerHTML = pastillesExercice(exo);
+        rendreLatex();
     });
 }
 
@@ -406,7 +557,7 @@ async function afficherTableauDeBordProf() {
             <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:18px; margin-top:12px;">
                 
                 <!-- Colonne Section -->
-                <div style="background:rgba(15,23,42,0.5); padding:15px; border-radius:10px; border:1px solid var(--border-color);">
+                <div style="background:var(--bg-subtle); padding:15px; border-radius:10px; border:1px solid var(--border-color);">
                     <label style="font-size:0.8rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">1. Domaine (Section)</label>
                     <select class="form-input" style="margin:8px 0;" onchange="changerSelectionProf('sec', this.value)">
                         ${secKeys.map(k => `<option value="${k}" ${k === admSec ? 'selected' : ''}>${adminFullData[k].titre}</option>`).join('')}
@@ -418,7 +569,7 @@ async function afficherTableauDeBordProf() {
                 </div>
 
                 <!-- Colonne Catégorie -->
-                <div style="background:rgba(15,23,42,0.5); padding:15px; border-radius:10px; border:1px solid var(--border-color);">
+                <div style="background:var(--bg-subtle); padding:15px; border-radius:10px; border:1px solid var(--border-color);">
                     <label style="font-size:0.8rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">2. Palier (Catégorie)</label>
                     <select class="form-input" style="margin:8px 0;" onchange="changerSelectionProf('cat', this.value)">
                         ${secObj.categories.map((c, i) => `<option value="${i}" ${i === admCatIdx ? 'selected' : ''}>${c.nom}</option>`).join('')}
@@ -430,7 +581,7 @@ async function afficherTableauDeBordProf() {
                 </div>
 
                 <!-- Colonne Chapitre -->
-                <div style="background:rgba(15,23,42,0.5); padding:15px; border-radius:10px; border:1px solid var(--border-color);">
+                <div style="background:var(--bg-subtle); padding:15px; border-radius:10px; border:1px solid var(--border-color);">
                     <label style="font-size:0.8rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">3. Chapitre</label>
                     <select class="form-input" style="margin:8px 0;" onchange="changerSelectionProf('chap', this.value)">
                         ${catObj && catObj.chapitres.length > 0 
@@ -485,12 +636,12 @@ async function afficherTableauDeBordProf() {
                     <div style="display:flex; flex-direction:column; gap:10px;">
                         ${(chapObj.theorie || []).length === 0 ? `<p style="color:var(--text-muted); font-size:0.9rem;">Aucun point théorique dans ce chapitre.</p>` : ''}
                         ${(chapObj.theorie || []).map((th, idx) => `
-                            <div style="background:rgba(15,23,42,0.6); border:1px solid var(--border-color); border-radius:10px; padding:12px 15px; display:flex; justify-content:space-between; align-items:center;">
+                            <div style="background:var(--bg-subtle); border:1px solid var(--border-color); border-radius:10px; padding:12px 15px; display:flex; justify-content:space-between; align-items:center;">
                                 <span style="font-weight:500; font-size:0.95rem;">${th.titre}</span>
                                 <div style="display:flex; gap:6px;">
                                     <button class="back-btn" style="margin:0; padding:4px 8px;" onclick="deplacerElement('theorie', ${idx}, -1)" title="Monter">↑</button>
                                     <button class="back-btn" style="margin:0; padding:4px 8px;" onclick="deplacerElement('theorie', ${idx}, 1)" title="Descendre">↓</button>
-                                    <button class="back-btn" style="margin:0; padding:4px 10px; color:#818cf8; border-color:#818cf8;" onclick="ouvrirEditeurCours(${idx})">✏️ Modifier</button>
+                                    <button class="back-btn" style="margin:0; padding:4px 10px; color:var(--link); border-color:var(--link);" onclick="ouvrirEditeurCours(${idx})">✏️ Modifier</button>
                                     <button class="logout-btn" style="padding:4px 8px;" onclick="supprimerElement('theorie', ${idx})">🗑️</button>
                                 </div>
                             </div>
@@ -507,7 +658,7 @@ async function afficherTableauDeBordProf() {
                     <div style="display:flex; flex-direction:column; gap:10px;">
                         ${(chapObj.exercices || []).length === 0 ? `<p style="color:var(--text-muted); font-size:0.9rem;">Aucun exercice dans ce chapitre.</p>` : ''}
                         ${(chapObj.exercices || []).map((exo, idx) => `
-                            <div style="background:rgba(15,23,42,0.6); border:1px solid var(--border-color); border-radius:10px; padding:12px 15px; display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                            <div style="background:var(--bg-subtle); border:1px solid var(--border-color); border-radius:10px; padding:12px 15px; display:flex; justify-content:space-between; align-items:center; gap:10px;">
                                 <div style="overflow:hidden;">
                                     <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
                                         <span class="score-badge" style="padding:2px 8px; font-size:0.75rem;">Exo ${exo.numero} (${exo.points} pts)</span>
@@ -520,7 +671,7 @@ async function afficherTableauDeBordProf() {
                                 <div style="display:flex; gap:6px; flex-shrink:0;">
                                     <button class="back-btn" style="margin:0; padding:4px 8px;" onclick="deplacerElement('exercices', ${idx}, -1)" title="Monter">↑</button>
                                     <button class="back-btn" style="margin:0; padding:4px 8px;" onclick="deplacerElement('exercices', ${idx}, 1)" title="Descendre">↓</button>
-                                    <button class="back-btn" style="margin:0; padding:4px 10px; color:#818cf8; border-color:#818cf8;" onclick="ouvrirEditeurExercice(${idx})">✏️ Modifier</button>
+                                    <button class="back-btn" style="margin:0; padding:4px 10px; color:var(--link); border-color:var(--link);" onclick="ouvrirEditeurExercice(${idx})">✏️ Modifier</button>
                                     <button class="logout-btn" style="padding:4px 8px;" onclick="supprimerElement('exercices', ${idx})">🗑️</button>
                                 </div>
                             </div>
@@ -682,7 +833,7 @@ function ouvrirEditeurCours(idx) {
                 <span style="font-size:0.8rem; color:var(--text-muted); align-self:center;">Insérer rapidement :</span>
                 <button type="button" class="back-btn" style="margin:0; padding:4px 10px; font-size:0.8rem;" onclick="insererBaliseCours('<h2>Sous-titre</h2>\\n')">Sous-titre</button>
                 <button type="button" class="back-btn" style="margin:0; padding:4px 10px; font-size:0.8rem;" onclick="insererBaliseCours('<p>Paragraphe...</p>\\n')">Paragraphe</button>
-                <button type="button" class="back-btn" style="margin:0; padding:4px 10px; font-size:0.8rem; color:#818cf8;" onclick="insererBaliseCours('<div class=\\'theorem-box\\'>\\n  <strong>Théorème :</strong> ...\\n</div>\\n')">Boîte Théorème / Propriété</button>
+                <button type="button" class="back-btn" style="margin:0; padding:4px 10px; font-size:0.8rem; color:var(--link);" onclick="insererBaliseCours('<div class=\\'theorem-box\\'>\\n  <strong>Théorème :</strong> ...\\n</div>\\n')">Boîte Théorème / Propriété</button>
                 <button type="button" class="back-btn" style="margin:0; padding:4px 10px; font-size:0.8rem;" onclick="insererBaliseCours('$$\\n  a^2 + b^2 = c^2\\n$$\\n')">Formule centrée $$...$$</button>
             </div>
 
@@ -802,15 +953,15 @@ function ouvrirEditeurExercice(idx) {
             </div>
 
             <!-- ZONE SPÉCIFIQUE : LATEX -->
-            <div id="zone-ed-latex" style="display:${exo.type === 'latex' ? 'block' : 'none'}; background:rgba(15,23,42,0.5); padding:20px; border-radius:12px; margin-bottom:20px;">
-                <label style="font-weight:600; color:#818cf8; display:block; margin-bottom:6px;">Réponses mathématiques acceptées (1 par ligne)</label>
+            <div id="zone-ed-latex" style="display:${exo.type === 'latex' ? 'block' : 'none'}; background:var(--bg-subtle); padding:20px; border-radius:12px; margin-bottom:20px;">
+                <label style="font-weight:600; color:var(--link); display:block; margin-bottom:6px;">Réponses mathématiques acceptées (1 par ligne)</label>
                 <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0;">Les espaces et signes de multiplication sont automatiquement ignorés, et <code>\\frac{1}{2}</code> équivaut à <code>\\frac12</code>. Les virgules sont conservées : <code>1,5</code> ou <code>(1,2)</code> restent une seule réponse.</p>
                 <textarea id="ed-exo-reponses" class="admin-textarea" style="min-height:80px; margin-bottom:0;">${echapperHtml((exo.reponsesValides || []).join('\n'))}</textarea>
             </div>
 
             <!-- ZONE SPÉCIFIQUE : QCM -->
-            <div id="zone-ed-qcm" style="display:${exo.type === 'qcm' ? 'block' : 'none'}; background:rgba(15,23,42,0.5); padding:20px; border-radius:12px; margin-bottom:20px;">
-                <label style="font-weight:600; color:#818cf8; display:block; margin-bottom:10px;">Propositions du QCM (Cochez la bonne réponse à gauche, laissez vides les lignes inutilisées)</label>
+            <div id="zone-ed-qcm" style="display:${exo.type === 'qcm' ? 'block' : 'none'}; background:var(--bg-subtle); padding:20px; border-radius:12px; margin-bottom:20px;">
+                <label style="font-weight:600; color:var(--link); display:block; margin-bottom:10px;">Propositions du QCM (Cochez la bonne réponse à gauche, laissez vides les lignes inutilisées)</label>
                 ${optionsQcm.map((opt, i) => `
                     <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
                         <input type="radio" name="qcm-correct" value="${i}" ${opt.correct ? 'checked' : ''} style="transform:scale(1.3); cursor:pointer;">
@@ -1016,4 +1167,4 @@ function rendreLatex() {
             delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}]
         });
     }
-}
+}

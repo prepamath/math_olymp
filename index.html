@@ -7,7 +7,7 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;700&display=swap" rel="stylesheet">
 
     <!-- KaTeX, MathLive & Supabase -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
@@ -25,7 +25,7 @@
 <div id="login-screen">
     <div class="login-card">
         <div class="nav-brand" style="justify-content: center; margin-bottom: 10px;">
-            <span>Ω</span> Olympiades Collège
+            Math<span>Olympiades</span>
         </div>
         <h1>Connexion</h1>
         <p>Entrez l'identifiant fourni par votre professeur.</p>
@@ -48,8 +48,9 @@
 <!-- 2. APPLICATION PRINCIPALE -->
 <div id="app-screen">
     <nav class="navbar">
+        <div class="navbar-inner">
         <div class="nav-brand" onclick="afficherSection(sectionActuelle)">
-            <span>Ω</span> MathOlympiades 4e/3e
+            Math<span>Olympiades</span>
         </div>
         <div class="nav-sections" id="nav-sections"></div>
         <div class="nav-user">
@@ -59,6 +60,7 @@
             <span class="score-badge" id="score-display">0 pt</span>
             <button class="logout-btn" onclick="seDeconnecter()">Déconnexion</button>
         </div>
+        </div>
     </nav>
 
     <div class="container" id="main-container"></div>
@@ -67,4 +69,4 @@
 <!-- Notre script d'application séparé -->
 <script src="app.js"></script>
 </body>
-</html>
+</html>
