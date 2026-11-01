@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Olympiades & Concours Général - Collège</title>
+
+    <!-- Police Google Fonts "Inter" -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- 1. KaTeX pour le rendu LaTeX -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
+    <!-- 2. MathLive pour la saisie d'équations -->
+    <script defer src="https://unpkg.com/mathlive"></script>
+
+    <!-- 3. Client Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --card-dark: #1e293b;
+            --input-dark: #0f172a;
+            --border-color: #334155;
+            --text-light: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+            --success: #10b981;
+            --error: #ef4444;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            background-image: radial-gradient(circle at top right, #1e1b4b, var(--bg-dark) 50%);
+            color: var(--text-light);
+            margin: 0;
+            min-height: 100vh;
+        }
+
+        /* ================= ÉCRAN DE CONNEXION ================= */
+        #login-screen {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            padding: 20px;
+        }
+
+        .login-card {
+            background: var(--card-dark);
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .login-card h1 { font-size: 1.5rem; margin: 10px 0 8px 0; }
+        .login-card p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 25px; }
+
+        .form-group { margin-bottom: 18px; text-align: left; }
+        .form-group label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px; font-weight: 500; }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--input-dark);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-light);
+            font-size: 1rem;
+            font-family: 'Inter', sans-serif;
+        }
+        .form-input:focus { outline: none; border-color: var(--accent); }
+
+        /* ================= APPLICATION PRINCIPALE ================= */
+        #app-screen { display: none; }
+
+        .navbar {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            padding: 0 30px;
+            height: 68px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .nav-brand {
+            font-weight: 700;
+            font-size: 1.15rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-light);
+            cursor: pointer;
+        }
+        .nav-brand span { background: var(--accent); color: white; padding: 4px 9px; border-radius: 6px; font-size: 0.85rem; }
+
+        .nav-sections { display: flex; gap: 8px; }
+        .nav-btn {
+            background: transparent; color: var(--text-muted); border: none;
+            padding: 8px 16px; border-radius: 8px; font-size: 0.95rem; font-weight: 500; cursor: pointer;
+        }
+        .nav-btn:hover { color: var(--text-light); background: rgba(255,255,255,0.05); }
+        .nav-btn.active { color: white; background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); }
+
+        .nav-user { display: flex; align-items: center; gap: 15px; font-size: 0.9rem; }
+        .score-badge {
+            background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #34d399; padding: 5px 12px; border-radius: 20px; font-weight: 600;
+        }
+        .logout-btn {
+            background: rgba(239, 68, 68, 0.15); color: #f87171; border: none;
+            padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 500;
+        }
+
+        .container { max-width: 960px; margin: 40px auto; padding: 0 20px 60px; }
+        .section-header { margin-bottom: 35px; border-bottom: 1px solid var(--border-color); padding-bottom: 20px; }
+        .breadcrumb { color: var(--accent); font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+        .section-header h1 { font-size: 2rem; margin: 0 0 12px 0; }
+        .section-intro { color: var(--text-muted); line-height: 1.6; font-size: 1rem; margin: 0; }
+
+        .category-title { font-size: 1.25rem; color: var(--text-light); margin: 35px 0 8px 0; }
+        .category-subtitle { color: var(--text-muted); font-size: 0.9rem; margin: 0 0 20px 0; }
+
+        .chapter-card {
+            background: var(--card-dark); border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 14px; padding: 25px 30px; margin-bottom: 20px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+        .chapter-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+        .chapter-title { font-size: 1.3rem; font-weight: 600; margin: 0; color: #fff; }
+        .prereq-badge {
+            font-size: 0.8rem; background: rgba(245, 158, 11, 0.15); color: #fbbf24;
+            padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+        .chapter-desc { color: var(--text-muted); font-size: 0.95rem; line-height: 1.5; margin-bottom: 20px; }
+
+        .chapter-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+            background: rgba(15, 23, 42, 0.5); padding: 16px 20px; border-radius: 10px;
+        }
+        .grid-col-title { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); margin-bottom: 10px; font-weight: 600; }
+
+        .theory-list { display: flex; flex-direction: column; gap: 6px; }
+        .theory-link { color: #818cf8; text-decoration: none; font-size: 0.95rem; cursor: pointer; padding: 4px 0; }
+        .theory-link:hover { color: #a5b4fc; text-decoration: underline; }
+
+        .exo-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+        .exo-pill {
+            width: 38px; height: 38px; border-radius: 8px; background: var(--card-dark);
+            border: 2px solid var(--border-color); color: var(--text-light); font-weight: 600;
+            display: flex; justify-content: center; align-items: center; cursor: pointer; transition: all 0.2s;
+        }
+        .exo-pill:hover:not(.locked) { border-color: var(--accent); transform: translateY(-2px); }
+        .exo-pill.solved { background: rgba(16, 185, 129, 0.2); border-color: var(--success); color: #34d399; }
+        .exo-pill.failed { background: rgba(239, 68, 68, 0.15); border-color: var(--error); color: #f87171; }
+        .exo-pill.locked { opacity: 0.4; cursor: not-allowed; background: #0f172a; }
+
+        .back-btn {
+            background: transparent; color: var(--text-muted); border: 1px solid var(--border-color);
+            padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.9rem; margin-bottom: 20px;
+        }
+        .back-btn:hover { color: white; border-color: var(--text-muted); }
+
+        .content-box {
+            background: var(--card-dark); padding: 40px; border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.08); line-height: 1.7;
+        }
+        .theorem-box {
+            background: rgba(99, 102, 241, 0.08); border-left: 4px solid var(--accent);
+            padding: 16px 20px; border-radius: 0 8px 8px 0; margin: 20px 0;
+        }
+
+        math-field {
+            width: 100%; font-size: 1.4rem; padding: 14px 20px; border: 2px solid var(--border-color);
+            border-radius: 12px; background: var(--input-dark); color: var(--text-light); margin: 20px 0;
+            --caret-color: var(--accent);
+        }
+        math-field:focus-within { border-color: var(--accent); outline: none; }
+        math-field::part(placeholder) { color: var(--text-muted); font-family: 'Inter', sans-serif; font-size: 1rem; }
+        math-field::part(menu-toggle) { display: none; }
+
+        .options-list { display: flex; flex-direction: column; gap: 12px; margin: 25px 0; }
+        .option-item {
+            background: var(--input-dark); border: 2px solid var(--border-color); border-radius: 12px;
+            padding: 14px 18px; cursor: pointer; display: flex; align-items: center; gap: 15px;
+        }
+        .option-item.selected { border-color: var(--accent); background: rgba(99, 102, 241, 0.1); }
+        .option-letter {
+            width: 30px; height: 30px; border-radius: 8px; background: var(--card-dark);
+            border: 1px solid #475569; color: var(--text-muted); display: flex; justify-content: center; align-items: center; font-weight: 600;
+        }
+        .option-item.selected .option-letter { background: var(--accent); color: white; border-color: var(--accent); }
+
+        .btn-primary {
+            background-color: var(--accent); color: white; border: none; padding: 14px 28px;
+            font-size: 1rem; font-weight: 600; border-radius: 10px; cursor: pointer; width: 100%;
+        }
+        .btn-primary:hover { background-color: var(--accent-hover); }
+
+        .feedback-box { margin-top: 20px; padding: 14px 18px; border-radius: 8px; font-weight: 500; display: none; }
+        .feedback-box.correct { display: block; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; }
+        .feedback-box.incorrect { display: block; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; }
+    </style>
+</head>
+<body>
+
+<!-- ==================== 1. ÉCRAN DE CONNEXION ==================== -->
+<div id="login-screen">
+    <div class="login-card">
+        <div class="nav-brand" style="justify-content: center; margin-bottom: 10px;">
+            <span>Ω</span> Olympiades Collège
+        </div>
+        <h1>Connexion</h1>
+        <p>Entrez l'identifiant fourni par votre professeur.</p>
+
+        <!-- onsubmit="return false;" empêche à 100% la page de se recharger et d'effacer le champ ! -->
+        <form id="login-form" onsubmit="tentativeConnexion(event); return false;">
+            <div class="form-group">
+                <label>Identifiant élève</label>
+                <input type="text" id="login-id" class="form-input" placeholder="ex: eleve01" required autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>Mot de passe</label>
+                <input type="password" id="login-pwd" class="form-input" placeholder="••••••••" required>
+            </div>
+            <button type="submit" class="btn-primary" id="login-btn">Accéder à l'entraînement</button>
+            <div id="login-error" class="feedback-box incorrect"></div>
+        </form>
+    </div>
+</div>
+
+<!-- ==================== 2. APPLICATION PRINCIPALE ==================== -->
+<div id="app-screen">
+    <nav class="navbar">
+        <div class="nav-brand" onclick="afficherSection(sectionActuelle)">
+            <span>Ω</span> MathOlympiades 4e/3e
+        </div>
+        <div class="nav-sections" id="nav-sections"></div>
+        <div class="nav-user">
+            <span id="user-display" style="color: var(--text-muted);"></span>
+            <span class="score-badge" id="score-display">0 pt</span>
+            <button class="logout-btn" onclick="seDeconnecter()">Déconnexion</button>
+        </div>
+    </nav>
+
+    <div class="container" id="main-container"></div>
+</div>
+
+<script>
+    // =========================================================================
+    // 1. INITIALISATION SUPABASE SÉCURISÉE (Renommé 'db' pour éviter le conflit)
+    // =========================================================================
+    const SUPABASE_URL = 'https://ssqmpzptapglvyyserok.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_DMl-vFYAKxX8BS1IR_3X0Q_KOey2ARr';
+    
+    let db = null;
+    try {
+        db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+            auth: { persistSession: true } // Évite le blocage de sécurité sur les fichiers locaux (file://)
+        });
+    } catch (err) {
+        console.error("Erreur init Supabase:", err);
+    }
+
+    let utilisateurConnecte = null;
+    let identifiantCourt = "";
+    let progressionEleve = {};
+    let sectionActuelle = "algebre";
+
+    // =========================================================================
+    // 2. FONCTION DE CONNEXION BLINDÉE
+    // =========================================================================
+    async function tentativeConnexion(e) {
+        if (e) e.preventDefault();
+        
+        const loginError = document.getElementById('login-error');
+        const btn = document.getElementById('login-btn');
+        loginError.style.display = 'none';
+
+        if (!db) {
+            loginError.textContent = "Erreur : La librairie Supabase n'a pas pu se charger (vérifiez votre connexion internet).";
+            loginError.style.display = 'block';
+            return;
+        }
+
+        btn.textContent = "Vérification en cours...";
+
+        let idSaisi = document.getElementById('login-id').value.trim().toLowerCase();
+        const pwdSaisi = document.getElementById('login-pwd').value;
+
+        // Ajoute @maths.local si l'élève n'a pas mis d'arobase
+        const emailInterne = idSaisi.includes('@') ? idSaisi : `${idSaisi}@maths.local`;
+
+        try {
+            const { data, error } = await db.auth.signInWithPassword({
+                email: emailInterne,
+                password: pwdSaisi
+            });
+
+            btn.textContent = "Accéder à l'entraînement";
+
+            if (error) {
+                // On affiche l'erreur exacte pour vous aider à tester
+                loginError.innerHTML = `Connexion refusée pour <b>${emailInterne}</b>.<br><small>(${error.message})</small>`;
+                loginError.style.display = "block";
+            } else if (data && data.user) {
+                initialiserSession(data.user);
+            }
+        } catch (err) {
+            btn.textContent = "Accéder à l'entraînement";
+            loginError.textContent = "Erreur technique : " + err.message;
+            loginError.style.display = "block";
+        }
+    }
+
+    async function initialiserSession(user) {
+        utilisateurConnecte = user;
+        identifiantCourt = user.email.split('@')[0];
+        document.getElementById('user-display').textContent = `👤 ${identifiantCourt}`;
+
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('app-screen').style.display = 'block';
+
+        await chargerProgressionEleve();
+        construireBarreNavigation();
+        afficherSection(sectionActuelle);
+    }
+
+    async function seDeconnecter() {
+        if (db) await db.auth.signOut();
+        window.location.reload();
+    }
+
+    // =========================================================================
+    // 3. CONTENU DU SITE (STYLE MATHRAINING)
+    // =========================================================================
+    const CONTENU_SITE = {
+        "algebre": {
+            titre: "Algèbre",
+            intro: "L'algèbre est un pilier des Olympiades de 4e/3e et du Concours Général. Savoir manipuler des expressions littérales, factoriser astucieusement et résoudre des équations vous permettra de débloquer les problèmes les plus coriaces.",
+            categories: [
+                {
+                    nom: "Les essentiels",
+                    sousTitre: "Les techniques de calcul indispensables à maîtriser sur le bout des doigts.",
+                    chapitres: [
+                        {
+                            id: "chap_identites",
+                            titre: "Calcul littéral & Factorisations",
+                            prerequis: null,
+                            description: "Factoriser une somme pour la transformer en produit est souvent la clé pour résoudre une équation ou trouver des diviseurs en arithmétique.",
+                            theorie: [
+                                {
+                                    id: "th_id_rem",
+                                    titre: "1. Identités remarquables et astuces",
+                                    contenu: `
+                                        <h2>Identités remarquables au-delà du programme</h2>
+                                        <p>Au collège, vous connaissez bien les trois identités remarquables classiques pour tous réels $a$ et $b$ :</p>
+                                        <div class="theorem-box">
+                                            $$(a+b)^2 = a^2 + 2ab + b^2$$
+                                            $$(a-b)^2 = a^2 - 2ab + b^2$$
+                                            $$(a-b)(a+b) = a^2 - b^2$$
+                                        </div>
+                                        <p>En Olympiades, on utilise très souvent la <strong>forme canonique</strong> qui consiste à faire apparaître le début d'un carré. Par exemple, pour factoriser $x^2 + x - 6$ :</p>
+                                        $$x^2 + x - 6 = \\left(x + \\frac{1}{2}\\right)^2 - \\frac{25}{4} = (x-2)(x+3)$$
+                                    `
+                                },
+                                {
+                                    id: "th_somme_prod",
+                                    titre: "2. Somme et produit de racines",
+                                    contenu: `
+                                        <h2>Reconnaître une factorisation rapide</h2>
+                                        <p>Pour factoriser un trinôme de la forme $x^2 + Sx + P$, on cherche deux nombres dont la somme vaut $S$ et le produit vaut $P$.</p>
+                                    `
+                                }
+                            ],
+                            exercices: [
+                                {
+                                    id: "exo_alg_1",
+                                    numero: 1,
+                                    points: 5,
+                                    type: "latex",
+                                    enonce: "Factoriser dans $\\mathbb{R}$ le polynôme $x^2+x-6$.",
+                                    reponsesValides: [
+                                        "(x-2)(x+3)", "(x-2)(3+x)", "(-2+x)(x+3)", "(-2+x)(3+x)",
+                                        "(x+3)(x-2)", "(3+x)(x-2)", "(x+3)(-2+x)", "(3+x)(-2+x)"
+                                    ],
+                                    indiceErreur: "Cherchez deux nombres dont le produit vaut -6 et la somme vaut 1."
+                                },
+                                {
+                                    id: "exo_alg_2",
+                                    numero: 2,
+                                    points: 8,
+                                    type: "latex",
+                                    enonce: "Factoriser l'expression $x^2 - 9 + (x-3)(2x+1)$. <br><small style='color:var(--text-muted)'>On attend une forme entièrement factorisée.</small>",
+                                    reponsesValides: [
+                                        "(x-3)(3x+4)", "(3x+4)(x-3)", "(x-3)(4+3x)", "(4+3x)(x-3)", "(-3+x)(3x+4)"
+                                    ],
+                                    indiceErreur: "Commencez par factoriser $x^2 - 9$ à l'aide d'une identité remarquable pour faire apparaître un facteur commun !"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    nom: "Les classiques",
+                    sousTitre: "Pour aller plus loin vers le niveau Seconde et le Concours Général.",
+                    chapitres: [
+                        {
+                            id: "chap_second_degre",
+                            titre: "Équations du second degré",
+                            prerequis: "chap_identites",
+                            description: "Comment trouver les racines de n'importe quel polynôme du second degré lorsque la factorisation n'est pas évidente à l'œil nu.",
+                            theorie: [
+                                {
+                                    id: "th_discriminant",
+                                    titre: "1. Le discriminant Δ",
+                                    contenu: `
+                                        <h2>Résolution générale de $ax^2 + bx + c = 0$</h2>
+                                        <p>On appelle discriminant le nombre $\\Delta = b^2 - 4ac$. Lorsqu'il est strictement positif, le polynôme possède deux racines réelles :</p>
+                                        <div class="theorem-box">
+                                            $$x_1 = \\frac{-b - \\sqrt{\\Delta}}{2a} \\quad \\text{et} \\quad x_2 = \\frac{-b + \\sqrt{\\Delta}}{2a}$$
+                                        </div>
+                                    `
+                                }
+                            ],
+                            exercices: [
+                                {
+                                    id: "exo_alg_3",
+                                    numero: 1,
+                                    points: 10,
+                                    type: "qcm",
+                                    enonce: "Dans $\\mathbb{R}$, quelles sont les racines du polynôme $x^2-5x+3$ ?",
+                                    options: [
+                                        { texte: "$x_1 = 2 \\quad \\text{et} \\quad x_2 = 3$", correct: false },
+                                        { texte: "$x_1 = \\dfrac{-5 - \\sqrt{13}}{2} \\quad \\text{et} \\quad x_2 = \\dfrac{-5 + \\sqrt{13}}{2}$", correct: false },
+                                        { texte: "$x_1 = \\dfrac{5 - \\sqrt{13}}{2} \\quad \\text{et} \\quad x_2 = \\dfrac{5 + \\sqrt{13}}{2}$", correct: true },
+                                        { texte: "$x_1 = \\dfrac{5 - \\sqrt{37}}{2} \\quad \\text{et} \\quad x_2 = \\dfrac{5 + \\sqrt{37}}{2}$", correct: false },
+                                        { texte: "Ce polynôme n'admet aucune racine dans $\\mathbb{R}$.", correct: false }
+                                    ],
+                                    indiceErreur: "Vérifiez votre calcul du discriminant $\\Delta = b^2 - 4ac$ ainsi que le signe de $-b$ !"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        "geometrie": {
+            titre: "Géométrie",
+            intro: "En géométrie d'Olympiades, tout commence par une figure soignée, une chasse aux angles et l'utilisation astucieuse des triangles semblables ou du théorème de Pythagore.",
+            categories: [
+                {
+                    nom: "Les essentiels",
+                    sousTitre: "Les outils fondamentaux de géométrie plane au collège.",
+                    chapitres: [
+                        {
+                            id: "chap_angles",
+                            titre: "Chasse aux angles et Polygones",
+                            prerequis: null,
+                            description: "Déterminer la somme des angles d'un polygone et utiliser les angles inscrits et alternes-internes.",
+                            theorie: [
+                                {
+                                    id: "th_angles_poly",
+                                    titre: "1. Somme des angles d'un polygone",
+                                    contenu: `<h2>Polygone à $n$ côtés</h2><p>Un polygone convexe à $n$ côtés peut être découpé en $n-2$ triangles. La somme de ses angles intérieurs vaut donc $(n-2) \\times 180^\\circ$.</p>`
+                                }
+                            ],
+                            exercices: [
+                                {
+                                    id: "exo_geo_1",
+                                    numero: 1,
+                                    points: 5,
+                                    type: "latex",
+                                    enonce: "Combien mesure (en degrés) chaque angle intérieur d'un hexagone régulier ? <br><small style='color:var(--text-muted)'>Entrez uniquement le nombre (sans le symbole degré).</small>",
+                                    reponsesValides: ["120"],
+                                    indiceErreur: "Un hexagone possède 6 côtés. La somme de ses 6 angles vaut $(6-2) \\times 180^\\circ$."
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    };
+
+    // =========================================================================
+    // 4. GESTION DE LA PROGRESSION ET DE L'AFFICHAGE
+    // =========================================================================
+    async function chargerProgressionEleve() {
+        const { data } = await db
+            .from('reponses_eleves')
+            .select('question_id, reponse_donnee, est_correct')
+            .order('created_at', { ascending: true });
+
+        progressionEleve = {};
+        if (data) {
+            data.forEach(row => {
+                const dejaReussi = progressionEleve[row.question_id]?.est_correct || false;
+                progressionEleve[row.question_id] = {
+                    est_correct: dejaReussi || row.est_correct,
+                    reponse: row.reponse_donnee
+                };
+            });
+        }
+        mettreAJourScore();
+    }
+
+    function mettreAJourScore() {
+        let totalPoints = 0;
+        for (const secKey in CONTENU_SITE) {
+            CONTENU_SITE[secKey].categories.forEach(cat => {
+                cat.chapitres.forEach(chap => {
+                    chap.exercices.forEach(exo => {
+                        if (progressionEleve[exo.id]?.est_correct) totalPoints += exo.points;
+                    });
+                });
+            });
+        }
+        document.getElementById('score-display').textContent = `${totalPoints} pts`;
+    }
+
+    function construireBarreNavigation() {
+        const nav = document.getElementById('nav-sections');
+        nav.innerHTML = '';
+        for (const key in CONTENU_SITE) {
+            const btn = document.createElement('button');
+            btn.className = `nav-btn ${key === sectionActuelle ? 'active' : ''}`;
+            btn.textContent = CONTENU_SITE[key].titre;
+            btn.onclick = () => afficherSection(key);
+            nav.appendChild(btn);
+        }
+    }
+
+    function chapitreEstComplete(chapId) {
+        for (const secKey in CONTENU_SITE) {
+            for (const cat of CONTENU_SITE[secKey].categories) {
+                for (const chap of cat.chapitres) {
+                    if (chap.id === chapId) {
+                        return chap.exercices.every(exo => progressionEleve[exo.id]?.est_correct);
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    function trouverTitreChapitre(chapId) {
+        for (const secKey in CONTENU_SITE) {
+            for (const cat of CONTENU_SITE[secKey].categories) {
+                for (const chap of cat.chapitres) {
+                    if (chap.id === chapId) return chap.titre;
+                }
+            }
+        }
+        return chapId;
+    }
+
+    function afficherSection(secKey) {
+        sectionActuelle = secKey;
+        construireBarreNavigation();
+
+        const section = CONTENU_SITE[secKey];
+        const container = document.getElementById('main-container');
+
+        let html = `
+            <div class="section-header">
+                <div class="breadcrumb">Théorie & Exercices > ${section.titre}</div>
+                <h1>${section.titre}</h1>
+                <p class="section-intro">${section.intro}</p>
+            </div>
+        `;
+
+        section.categories.forEach(cat => {
+            html += `
+                <h2 class="category-title">${cat.nom}</h2>
+                <p class="category-subtitle">${cat.sousTitre}</p>
+            `;
+
+            cat.chapitres.forEach(chap => {
+                const prerequisOk = !chap.prerequis || chapitreEstComplete(chap.prerequis);
+                const nomPrerequis = chap.prerequis ? trouverTitreChapitre(chap.prerequis) : '';
+
+                html += `
+                    <div class="chapter-card">
+                        <div class="chapter-header">
+                            <h3 class="chapter-title">${chap.titre}</h3>
+                            ${!prerequisOk ? `<span class="prereq-badge">🔒 Prérequis : ${nomPrerequis}</span>` : ''}
+                        </div>
+                        <p class="chapter-desc">${chap.description}</p>
+                        
+                        <div class="chapter-grid">
+                            <div>
+                                <div class="grid-col-title">Points théoriques</div>
+                                <div class="theory-list">
+                                    ${chap.theorie.map(th => `
+                                        <a class="theory-link" onclick="afficherTheorie('${secKey}', '${chap.id}', '${th.id}')">
+                                            📘 ${th.titre}
+                                        </a>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            <div>
+                                <div class="grid-col-title">Exercices</div>
+                                <div class="exo-pills">
+                                    ${chap.exercices.map(exo => {
+                                        const statut = progressionEleve[exo.id];
+                                        let classeStatut = '';
+                                        if (!prerequisOk) classeStatut = 'locked';
+                                        else if (statut?.est_correct) classeStatut = 'solved';
+                                        else if (statut && !statut.est_correct) classeStatut = 'failed';
+
+                                        const actionClic = prerequisOk 
+                                            ? `onclick="afficherExercice('${secKey}', '${chap.id}', '${exo.id}')"` 
+                                            : `title="Complétez d'abord le chapitre : ${nomPrerequis}"`;
+
+                                        return `<div class="exo-pill ${classeStatut}" ${actionClic}>${exo.numero}</div>`;
+                                    }).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        });
+
+        container.innerHTML = html;
+        rendreLatex();
+    }
+
+    function afficherTheorie(secKey, chapId, thId) {
+        const chap = trouverObjetChapitre(secKey, chapId);
+        const th = chap.theorie.find(t => t.id === thId);
+
+        const container = document.getElementById('main-container');
+        container.innerHTML = `
+            <button class="back-btn" onclick="afficherSection('${secKey}')">← Retour à la section ${CONTENU_SITE[secKey].titre}</button>
+            <div class="content-box">
+                <div class="breadcrumb">${chap.titre} — Point théorique</div>
+                ${th.contenu}
+            </div>
+        `;
+        rendreLatex();
+    }
+
+    function afficherExercice(secKey, chapId, exoId) {
+        const chap = trouverObjetChapitre(secKey, chapId);
+        const exo = chap.exercices.find(e => e.id === exoId);
+        const dejaReussi = progressionEleve[exo.id]?.est_correct || false;
+        const ancienneReponse = progressionEleve[exo.id]?.reponse || "";
+
+        const container = document.getElementById('main-container');
+
+        let zoneInteraction = '';
+        if (exo.type === 'latex') {
+            zoneInteraction = `<math-field id="reponse-eleve" placeholder="\\text{Tapez votre réponse ici...}">${dejaReussi ? ancienneReponse : ''}</math-field>`;
+        } else if (exo.type === 'qcm') {
+            const lettres = ['A', 'B', 'C', 'D', 'E'];
+            zoneInteraction = `
+                <div class="options-list">
+                    ${exo.options.map((opt, idx) => `
+                        <div class="option-item ${dejaReussi && opt.correct ? 'selected' : ''}" data-index="${idx}">
+                            <div class="option-letter">${lettres[idx]}</div>
+                            <div class="option-content">${opt.texte}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        container.innerHTML = `
+            <button class="back-btn" onclick="afficherSection('${secKey}')">← Retour au chapitre "${chap.titre}"</button>
+            <div class="content-box">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                    <span class="breadcrumb">${chap.titre} — Exercice ${exo.numero}</span>
+                    <span class="score-badge">${exo.points} points</span>
+                </div>
+                <h2 style="font-weight:500; font-size:1.3rem; margin-top:0;">${exo.enonce}</h2>
+                ${zoneInteraction}
+                <button class="btn-primary" id="btn-valider-exo">Vérifier la réponse</button>
+                <div id="feedback-exo" class="feedback-box ${dejaReussi ? 'correct' : ''}" style="${dejaReussi ? 'display:block' : ''}">
+                    ${dejaReussi ? '✨ Vous avez déjà résolu cet exercice avec succès !' : ''}
+                </div>
+            </div>
+        `;
+
+        rendreLatex();
+        attacherEvenementsExercice(exo);
+    }
+
+    function attacherEvenementsExercice(exo) {
+        const btnValider = document.getElementById('btn-valider-exo');
+        const feedback = document.getElementById('feedback-exo');
+        let indexQcmChoisi = null;
+
+        if (exo.type === 'qcm') {
+            const items = document.querySelectorAll('.option-item');
+            items.forEach(item => {
+                item.addEventListener('click', () => {
+                    items.forEach(i => i.classList.remove('selected'));
+                    item.classList.add('selected');
+                    indexQcmChoisi = parseInt(item.getAttribute('data-index'));
+                    feedback.style.display = 'none';
+                });
+            });
+        }
+
+        btnValider.addEventListener('click', async () => {
+            let reponseBrute = "";
+            let estCorrect = false;
+
+            if (exo.type === 'latex') {
+                const mf = document.getElementById('reponse-eleve');
+                reponseBrute = mf.value || "";
+                const clean = nettoyerLatex(reponseBrute);
+                if (!clean) {
+                    afficherFeedback(feedback, "Veuillez entrer une réponse.", false);
+                    return;
+                }
+                estCorrect = exo.reponsesValides.includes(clean);
+            } else if (exo.type === 'qcm') {
+                if (indexQcmChoisi === null) {
+                    afficherFeedback(feedback, "Veuillez sélectionner une proposition.", false);
+                    return;
+                }
+                reponseBrute = `Choix_${indexQcmChoisi}`;
+                estCorrect = exo.options[indexQcmChoisi].correct;
+            }
+
+            if (estCorrect) {
+                afficherFeedback(feedback, `✨ Bravo ! C'est exact (+${exo.points} points).`, true);
+            } else {
+                afficherFeedback(feedback, `Ce n'est pas la bonne réponse. Indice : ${exo.indiceErreur}`, false);
+            }
+
+            await db.from('reponses_eleves').insert({
+                user_id: utilisateurConnecte.id,
+                identifiant_eleve: identifiantCourt,
+                question_id: exo.id,
+                reponse_donnee: reponseBrute,
+                est_correct: estCorrect
+            });
+
+            await chargerProgressionEleve();
+        });
+    }
+
+    function afficherFeedback(el, message, succes) {
+        el.innerHTML = message;
+        el.className = `feedback-box ${succes ? 'correct' : 'incorrect'}`;
+        el.style.display = 'block';
+        rendreLatex();
+    }
+
+    function nettoyerLatex(raw) {
+        return raw
+            .replace(/\\left/g, '').replace(/\\right/g, '')
+            .replace(/\\mleft/g, '').replace(/\\mright/g, '')
+            .replace(/\\,/g, '').replace(/\\:/g, '').replace(/\\;/g, '').replace(/\\ /g, '')
+            .replace(/\s+/g, '').replace(/\\cdot/g, '').replace(/\\times/g, '').replace(/\*/g, '')
+            .replace(/\{/g, '').replace(/\}/g, '').replace(/^1\(/, '(')
+            .toLowerCase();
+    }
+
+    function trouverObjetChapitre(secKey, chapId) {
+        for (const cat of CONTENU_SITE[secKey].categories) {
+            for (const chap of cat.chapitres) {
+                if (chap.id === chapId) return chap;
+            }
+        }
+        return null;
+    }
+
+    function rendreLatex() {
+        if (window.renderMathInElement) {
+            renderMathInElement(document.body, {
+                delimiters: [
+                    {left: '$$', right: '$$', display: true},
+                    {left: '$', right: '$', display: false}
+                ]
+            });
+        }
+    }
+</script>
+
+</body>
+</html>
