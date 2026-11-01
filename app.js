@@ -148,7 +148,8 @@ function chapitreEstComplete(chapId) {
             }
         }
     }
-    return false;
+    // Un prérequis supprimé ne doit pas verrouiller le chapitre pour toujours
+    return true;
 }
 
 function trouverTitreChapitre(chapId) {
@@ -319,6 +320,9 @@ function attacherEvenementsExercice(exo) {
 
         if (error || !res) {
             return afficherFeedback(feedback, "Erreur lors de la vérification.", false);
+        }
+        if (res.error) {
+            return afficherFeedback(feedback, res.error, false);
         }
 
         if (res.est_correct) {
@@ -686,7 +690,7 @@ function ouvrirEditeurCours(idx) {
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; align-items:stretch;">
                 <div>
                     <label style="font-size:0.8rem; color:var(--text-muted);">Texte LaTeX / HTML :</label>
-                    <textarea id="ed-th-contenu" class="admin-textarea" style="height:360px; margin-top:6px;" oninput="majApercuCours()">${th.contenu}</textarea>
+                    <textarea id="ed-th-contenu" class="admin-textarea" style="height:360px; margin-top:6px;" oninput="majApercuCours()">${echapperHtml(th.contenu)}</textarea>
                 </div>
                 <div>
                     <label style="font-size:0.8rem; color:var(--text-muted);">Aperçu élève en direct :</label>
@@ -789,7 +793,7 @@ function ouvrirEditeurExercice(idx) {
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:20px;">
                 <div>
                     <label style="font-size:0.85rem; color:var(--text-muted);">Énoncé de l'exercice (LaTeX $...$ et $$...$$ acceptés) :</label>
-                    <textarea id="ed-exo-enonce" class="admin-textarea" style="height:130px; margin-top:6px;" oninput="majApercuExo()">${exo.enonce}</textarea>
+                    <textarea id="ed-exo-enonce" class="admin-textarea" style="height:130px; margin-top:6px;" oninput="majApercuExo()">${echapperHtml(exo.enonce)}</textarea>
                 </div>
                 <div>
                     <label style="font-size:0.85rem; color:var(--text-muted);">Aperçu de l'énoncé en direct :</label>
@@ -799,9 +803,9 @@ function ouvrirEditeurExercice(idx) {
 
             <!-- ZONE SPÉCIFIQUE : LATEX -->
             <div id="zone-ed-latex" style="display:${exo.type === 'latex' ? 'block' : 'none'}; background:rgba(15,23,42,0.5); padding:20px; border-radius:12px; margin-bottom:20px;">
-                <label style="font-weight:600; color:#818cf8; display:block; margin-bottom:6px;">Réponses mathématiques acceptées (1 par ligne ou séparées par des virgules)</label>
-                <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0;">Les espaces et signes de multiplication sont automatiquement ignorés. Exemple : <code>(x-4)(x+4), (x+4)(x-4)</code></p>
-                <textarea id="ed-exo-reponses" class="admin-textarea" style="min-height:80px; margin-bottom:0;">${(exo.reponsesValides || []).join(', ')}</textarea>
+                <label style="font-weight:600; color:#818cf8; display:block; margin-bottom:6px;">Réponses mathématiques acceptées (1 par ligne)</label>
+                <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0;">Les espaces et signes de multiplication sont automatiquement ignorés, et <code>\\frac{1}{2}</code> équivaut à <code>\\frac12</code>. Les virgules sont conservées : <code>1,5</code> ou <code>(1,2)</code> restent une seule réponse.</p>
+                <textarea id="ed-exo-reponses" class="admin-textarea" style="min-height:80px; margin-bottom:0;">${echapperHtml((exo.reponsesValides || []).join('\n'))}</textarea>
             </div>
 
             <!-- ZONE SPÉCIFIQUE : QCM -->
@@ -858,7 +862,7 @@ async function enregistrerExercice(idx, idExistant, numeroExistant) {
 
     if (type === 'latex') {
         const rawReps = document.getElementById('ed-exo-reponses').value;
-        const reponsesValides = rawReps.split(/[\n,]+/).map(r => r.trim()).filter(Boolean);
+        const reponsesValides = rawReps.split(/\n+/).map(r => r.trim()).filter(Boolean);
         if (reponsesValides.length === 0) return alert("Veuillez indiquer au moins une réponse valide.");
         nouvelExo.reponsesValides = reponsesValides;
     } else {
@@ -907,7 +911,7 @@ async function afficherSuiviElevesProf() {
                     ${(historique || []).map(h => `
                         <tr>
                             <td><b>👤 ${echapperHtml(h.identifiant_eleve)}</b></td>
-                            <td>${echapperHtml(h.question_id)}</td>
+                            <td>${echapperHtml(trouverTitreExercice(h.question_id))}</td>
                             <td><code>${echapperHtml(h.reponse_donnee)}</code></td>
                             <td style="color:${h.est_correct ? '#34d399' : '#f87171'}; font-weight:600;">${h.est_correct ? '✔ Réussi' : '✘ Essai faux'}</td>
                             <td style="color:var(--text-muted);">${new Date(h.created_at).toLocaleString('fr-FR')}</td>
@@ -917,6 +921,18 @@ async function afficherSuiviElevesProf() {
             </table>
         </div>
     `;
+}
+
+function trouverTitreExercice(exoId) {
+    for (const secKey in adminFullData) {
+        for (const cat of (adminFullData[secKey].categories || [])) {
+            for (const chap of (cat.chapitres || [])) {
+                const exo = (chap.exercices || []).find(e => e.id === exoId);
+                if (exo) return `${chap.titre} — Exo ${exo.numero}`;
+            }
+        }
+    }
+    return exoId;
 }
 
 function exporterSauvegardeJson() {
@@ -930,7 +946,7 @@ function exporterSauvegardeJson() {
 }
 
 function echapperAttr(str) {
-    return (str || '').replace(/"/g, '&quot;');
+    return (str || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 }
 
 function echapperHtml(str) {

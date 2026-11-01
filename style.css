@@ -104,11 +104,26 @@ math-field::part(menu-toggle) { display: none; }
 .btn-primary:hover { background-color: var(--accent-hover); }
 
 .feedback-box { margin-top: 20px; padding: 14px 18px; border-radius: 8px; font-weight: 500; display: none; }
-.feedback-box.correct { display: block; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; }
-.feedback-box.incorrect { display: block; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; }
+.feedback-box.correct { background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; }
+.feedback-box.incorrect { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; }
 
 /* Tableaux et formulaires Admin */
 table.admin-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.9rem; }
 table.admin-table th, table.admin-table td { border-bottom: 1px solid var(--border-color); padding: 10px; text-align: left; }
 table.admin-table th { color: var(--text-muted); }
 textarea.admin-textarea { width: 100%; min-height: 150px; background: var(--input-dark); color: #fff; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; font-family: monospace; font-size: 0.9rem; margin-bottom: 15px; }
+
+/* Téléphones et petites tablettes */
+@media (max-width: 768px) {
+    .navbar { height: auto; flex-wrap: wrap; gap: 8px; padding: 10px 16px; }
+    .nav-sections { order: 3; width: 100%; overflow-x: auto; }
+    .nav-user { flex-wrap: wrap; gap: 8px; }
+    .container { margin: 20px auto; padding: 0 16px 40px; }
+    .content-box { padding: 20px; }
+    .chapter-card { padding: 20px; }
+    .chapter-header { flex-direction: column; gap: 8px; }
+    .chapter-grid { grid-template-columns: 1fr; }
+    /* L'espace prof définit ses grilles en style inline */
+    [style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+    table.admin-table { display: block; overflow-x: auto; }
+}
