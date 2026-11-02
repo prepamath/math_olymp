@@ -26,6 +26,68 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (session) initialiserSession(session.user);
 });
 
+let editeurModifie = false;
+
+// Retour / Suivant du navigateur : chaque page du site a sa propre adresse
+window.addEventListener('popstate', () => {
+    if (!utilisateurConnecte) return;
+    if (editeurModifie) {
+        if (!confirm("Les modifications non enregistrées seront perdues. Quitter l'éditeur ?")) {
+            // L'adresse a déjà changé : on remet celle de l'éditeur, resté affiché
+            history.pushState(null, '', '#/prof/edition');
+            return;
+        }
+        editeurModifie = false;
+    }
+    afficherRoute();
+});
+
+// Fermeture de l'onglet ou rechargement pendant une modification
+window.addEventListener('beforeunload', e => {
+    if (!editeurModifie) return;
+    e.preventDefault();
+    e.returnValue = '';
+});
+
+function suivreModificationsEditeur() {
+    editeurModifie = false;
+    const container = document.getElementById('main-container');
+    container.oninput = container.onchange = () => {
+        if (location.hash === '#/prof/edition') editeurModifie = true;
+    };
+}
+
+function changerRoute(route) {
+    // Toute autre page affichée a remplacé l'éditeur
+    if (route !== '#/prof/edition') editeurModifie = false;
+    if (location.hash === route) return;
+    history.pushState(null, '', route);
+    window.scrollTo(0, 0);
+}
+
+async function afficherRoute() {
+    const [page, a, b, c] = location.hash.replace(/^#\//, '').split('/');
+
+    if (page === 'prof' && estProfesseur) {
+        // Un éditeur fermé n'est pas rouvert : on revient au tableau de bord
+        if (a === 'edition') history.replaceState(null, '', '#/prof');
+        if (!adminFullData) await chargerDonneesProf();
+        return a === 'suivi' ? afficherSuiviElevesProf() : afficherTableauDeBordProf();
+    }
+    if (page === 'stats') return afficherStatistiques();
+
+    const chap = CONTENU_SITE[a] ? trouverObjetChapitre(a, b) : null;
+    if (page === 'theorie' && chap?.theorie?.some(th => th.id === c)) return afficherTheorie(a, b, c);
+    if (page === 'exercice' && chap?.exercices?.some(exo => exo.id === c)
+        && (!chap.prerequis || chapitreEstComplete(chap.prerequis))) {
+        return afficherExercice(a, b, c);
+    }
+
+    const secKey = page === 'section' && CONTENU_SITE[a] ? a : sectionActuelle;
+    history.replaceState(null, '', `#/section/${secKey}`);
+    afficherSection(secKey);
+}
+
 async function tentativeConnexion(e) {
     if (e) e.preventDefault();
     const loginError = document.getElementById('login-error');
@@ -77,7 +139,7 @@ async function initialiserSession(user) {
 
     sectionActuelle = Object.keys(CONTENU_SITE)[0];
     await Promise.all([chargerProgressionEleve(), chargerStatistiques()]);
-    afficherSection(sectionActuelle);
+    await afficherRoute();
 }
 
 async function rechargerSiteEleve() {
@@ -87,6 +149,7 @@ async function rechargerSiteEleve() {
 
 async function seDeconnecter() {
     await db.auth.signOut();
+    history.replaceState(null, '', location.pathname);
     window.location.reload();
 }
 
@@ -175,6 +238,7 @@ function afficherSection(secKey) {
     if (!secKey) return;
     sectionActuelle = secKey;
     pageStatsActive = false;
+    changerRoute(`#/section/${secKey}`);
     construireBarreNavigation();
     const section = CONTENU_SITE[secKey];
     const container = document.getElementById('main-container');
@@ -267,6 +331,9 @@ function menuChapitre(secKey, chap, idActif) {
 }
 
 function afficherPageChapitre(secKey, chap, idActif, contenu) {
+    sectionActuelle = secKey;
+    pageStatsActive = false;
+    construireBarreNavigation();
     document.getElementById('main-container').innerHTML = `
         <h1 class="page-title">
             <span class="page-title-parent">Théorie &gt; <a onclick="afficherSection('${secKey}')">${CONTENU_SITE[secKey].titre}</a> &gt;</span>
@@ -283,6 +350,7 @@ function afficherPageChapitre(secKey, chap, idActif, contenu) {
 function afficherTheorie(secKey, chapId, thId) {
     const chap = trouverObjetChapitre(secKey, chapId);
     const th = chap.theorie.find(t => t.id === thId);
+    changerRoute(`#/theorie/${secKey}/${chapId}/${thId}`);
     afficherPageChapitre(secKey, chap, thId, th.contenu);
 }
 
@@ -300,6 +368,7 @@ function pastillesExercice(exo) {
 function afficherExercice(secKey, chapId, exoId) {
     const chap = trouverObjetChapitre(secKey, chapId);
     const exo = chap.exercices.find(e => e.id === exoId);
+    changerRoute(`#/exercice/${secKey}/${chapId}/${exoId}`);
     // Un exercice résolu reste ouvert : l'élève repart d'une zone vide pour s'entraîner
     const dejaReussi = progressionEleve[exo.id]?.est_correct || false;
 
@@ -390,6 +459,7 @@ async function chargerStatistiques() {
 
 async function afficherStatistiques() {
     pageStatsActive = true;
+    changerRoute('#/stats');
     construireBarreNavigation();
     await chargerStatistiques();
     const podium = statsSite.podium || [];
@@ -494,6 +564,14 @@ function attacherEvenementsExercice(secKey, chap, exo) {
 // ESPACE PROFESSEUR VISUEL (ZÉRO JSON À MANIPULER !)
 // =========================================================================
 async function ouvrirPanneauProf() {
+    await chargerDonneesProf();
+    admCatIdx = 0;
+    admChapIdx = 0;
+
+    afficherTableauDeBordProf();
+}
+
+async function chargerDonneesProf() {
     const { data: configRow } = await db.from('configuration_site').select('data').eq('id', 1).single();
     if (configRow && configRow.data && Object.keys(configRow.data).length > 0) {
         adminFullData = configRow.data;
@@ -503,10 +581,11 @@ async function ouvrirPanneauProf() {
     }
 
     if (!admSec || !adminFullData[admSec]) admSec = Object.keys(adminFullData)[0];
-    admCatIdx = 0;
-    admChapIdx = 0;
+}
 
-    afficherTableauDeBordProf();
+function retourTableauProf() {
+    if (location.hash === '#/prof/edition') history.back();
+    else afficherTableauDeBordProf();
 }
 
 async function sauvegarderSilence() {
@@ -521,6 +600,7 @@ async function sauvegarderSilence() {
 }
 
 async function afficherTableauDeBordProf() {
+    changerRoute('#/prof');
     const container = document.getElementById('main-container');
     
     // Sécuriser les index sélectionnés
@@ -813,6 +893,8 @@ async function supprimerElement(typeListe, idx) {
 // ÉDITEUR VISUEL DE COURS (AVEC APERÇU LATEX EN DIRECT)
 // =========================================================================
 function ouvrirEditeurCours(idx) {
+    changerRoute('#/prof/edition');
+    suivreModificationsEditeur();
     const chap = adminFullData[admSec].categories[admCatIdx].chapitres[admChapIdx];
     const estNouveau = (idx === -1);
     const th = estNouveau ? {
@@ -823,7 +905,7 @@ function ouvrirEditeurCours(idx) {
 
     const container = document.getElementById('main-container');
     container.innerHTML = `
-        <button class="back-btn" onclick="afficherTableauDeBordProf()">← Annuler et revenir au chapitre</button>
+        <button class="back-btn" onclick="retourTableauProf()">← Annuler et revenir au chapitre</button>
         <div class="content-box">
             <div class="breadcrumb">${chap.titre} — ${estNouveau ? 'Nouveau Cours' : 'Modification du cours'}</div>
             
@@ -891,13 +973,16 @@ async function enregistrerCours(idx, idExistant) {
     else chap.theorie[idx] = objetCours;
 
     await sauvegarderSilence();
-    afficherTableauDeBordProf();
+    editeurModifie = false;
+    retourTableauProf();
 }
 
 // =========================================================================
 // ÉDITEUR VISUEL D'EXERCICE (LATEX OU QCM + APERÇU EN DIRECT)
 // =========================================================================
 function ouvrirEditeurExercice(idx) {
+    changerRoute('#/prof/edition');
+    suivreModificationsEditeur();
     const chap = adminFullData[admSec].categories[admCatIdx].chapitres[admChapIdx];
     const estNouveau = (idx === -1);
     const exo = estNouveau ? {
@@ -926,7 +1011,7 @@ function ouvrirEditeurExercice(idx) {
 
     const container = document.getElementById('main-container');
     container.innerHTML = `
-        <button class="back-btn" onclick="afficherTableauDeBordProf()">← Annuler et revenir au chapitre</button>
+        <button class="back-btn" onclick="retourTableauProf()">← Annuler et revenir au chapitre</button>
         <div class="content-box">
             <div class="breadcrumb">${chap.titre} — ${estNouveau ? 'Nouvel Exercice' : `Modification de l'exercice ${exo.numero}`}</div>
             
@@ -1038,13 +1123,15 @@ async function enregistrerExercice(idx, idExistant, numeroExistant) {
     else chap.exercices[idx] = nouvelExo;
 
     await sauvegarderSilence();
-    afficherTableauDeBordProf();
+    editeurModifie = false;
+    retourTableauProf();
 }
 
 // =========================================================================
 // SUIVI DES ÉLÈVES & EXPORT DE SAUVEGARDE
 // =========================================================================
 async function afficherSuiviElevesProf() {
+    changerRoute('#/prof/suivi');
     const container = document.getElementById('main-container');
     const { data: historique } = await db.from('reponses_eleves').select('*').order('created_at', { ascending: false }).limit(100);
 
