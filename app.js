@@ -300,14 +300,14 @@ function pastillesExercice(exo) {
 function afficherExercice(secKey, chapId, exoId) {
     const chap = trouverObjetChapitre(secKey, chapId);
     const exo = chap.exercices.find(e => e.id === exoId);
+    // Un exercice résolu reste ouvert : l'élève repart d'une zone vide pour s'entraîner
     const dejaReussi = progressionEleve[exo.id]?.est_correct || false;
-    const ancienneReponse = progressionEleve[exo.id]?.reponse || "";
 
     let zoneInteraction = '';
     if (exo.type === 'latex') {
         zoneInteraction = `
             <label class="answer-label">Votre réponse</label>
-            <math-field id="reponse-eleve">${dejaReussi ? ancienneReponse : ''}</math-field>
+            <math-field id="reponse-eleve"></math-field>
         `;
     } else if (exo.type === 'qcm') {
         const lettres = ['A', 'B', 'C', 'D', 'E', 'F'];
@@ -315,7 +315,7 @@ function afficherExercice(secKey, chapId, exoId) {
             <label class="answer-label">Votre réponse</label>
             <div class="options-list">
                 ${(exo.options || []).map((opt, idx) => `
-                    <div class="option-item ${dejaReussi && ancienneReponse === 'Choix_' + idx ? 'selected' : ''}" data-index="${idx}">
+                    <div class="option-item" data-index="${idx}">
                         <div class="option-letter">${lettres[idx] || (idx + 1)}</div>
                         <div class="option-content">${opt.texte}</div>
                     </div>
@@ -334,7 +334,7 @@ function afficherExercice(secKey, chapId, exoId) {
         <button class="btn-primary btn-soumettre" id="btn-valider-exo">Soumettre</button>
         <span id="exo-tentatives" class="exo-tentatives"></span>
         <div id="feedback-exo" class="feedback-box ${dejaReussi ? 'correct' : ''}" style="${dejaReussi ? 'display:block' : ''}">
-            ${dejaReussi ? '✨ Vous avez déjà résolu cet exercice avec succès !' : ''}
+            ${dejaReussi ? '✨ Vous avez déjà résolu cet exercice avec succès ! Vous pouvez y répondre à nouveau pour vous entraîner (sans points supplémentaires).' : ''}
         </div>
     `);
 
@@ -454,6 +454,8 @@ function attacherEvenementsExercice(secKey, chap, exo) {
             reponseClean = indexQcmChoisi.toString();
         }
 
+        // Lu avant l'envoi : la progression est rechargée juste après la correction
+        const dejaReussi = progressionEleve[exo.id]?.est_correct || false;
         btnValider.textContent = "Vérification en cours...";
         const { data: res, error } = await db.rpc('verifier_reponse_serveur', {
             p_exo_id: exo.id,
@@ -474,7 +476,9 @@ function attacherEvenementsExercice(secKey, chap, exo) {
         }
 
         if (res.est_correct) {
-            afficherFeedback(feedback, `✨ Bravo ! C'est exact (+${res.points} points).`, true);
+            afficherFeedback(feedback, dejaReussi
+                ? `✨ Bravo ! C'est exact (exercice déjà résolu : pas de points supplémentaires).`
+                : `✨ Bravo ! C'est exact (+${res.points} points).`, true);
         } else {
             afficherFeedback(feedback, `Ce n'est pas la bonne réponse. ${res.indice ? '<br>💡 <b>Indice :</b> ' + res.indice : ''}`, false);
         }
