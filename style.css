@@ -159,6 +159,12 @@ table.score-table th, table.score-table td { border: 1px solid var(--border-colo
 table.score-table th { background: var(--card-dark); }
 .score-moi td { background: #002d73; font-weight: 700; }
 
+/* Cours et exercices : les tableaux et formules trop larges défilent au lieu de déborder.
+   min-width: 0 empêche l'élément de grille de s'élargir à la taille de son contenu. */
+.chapter-main { min-width: 0; }
+.chapter-main table { display: block; overflow-x: auto; max-width: 100%; }
+.chapter-main .katex-display { overflow-x: auto; overflow-y: hidden; }
+
 /* Tableaux et formulaires Admin */
 table.admin-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.9rem; }
 table.admin-table th, table.admin-table td { border-bottom: 1px solid var(--border-color); padding: 10px; text-align: left; }
