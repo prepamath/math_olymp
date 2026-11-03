@@ -116,7 +116,9 @@ async function tentativeConnexion(e) {
 async function initialiserSession(user) {
     utilisateurConnecte = user;
     const identifiantCourt = user.email.split('@')[0];
-    estProfesseur = (user.email === 'prof@maths.local');
+    // La liste des comptes prof est sur le serveur (private.profs).
+    const { data: prof } = await db.rpc('est_prof');
+    estProfesseur = prof === true;
 
     document.getElementById('user-display').textContent = `👤 ${identifiantCourt}`;
     if (estProfesseur) {
