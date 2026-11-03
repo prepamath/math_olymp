@@ -165,6 +165,12 @@ table.score-table th { background: var(--card-dark); }
 .chapter-main table { display: block; overflow-x: auto; max-width: 100%; }
 .chapter-main .katex-display { overflow-x: auto; overflow-y: hidden; }
 
+/* Réponse cachée dans un cours : visible au survol, au focus ou après un toucher */
+.reponse-cachee { background: var(--bouton-hover); border-radius: 4px; padding: 0 6px; cursor: pointer; }
+.reponse-cachee:not(:hover):not(:focus):not(.revelee) { color: transparent; user-select: none; }
+.reponse-cachee:not(:hover):not(:focus):not(.revelee) .katex { visibility: hidden; }
+.reponse-cachee.revelee, .reponse-cachee:hover, .reponse-cachee:focus { background: var(--bouton); outline: none; }
+
 /* Tableaux et formulaires Admin */
 table.admin-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.9rem; }
 table.admin-table th, table.admin-table td { border-bottom: 1px solid var(--border-color); padding: 10px; text-align: left; }

@@ -49,6 +49,12 @@ window.addEventListener('beforeunload', e => {
     e.returnValue = '';
 });
 
+// Réponses cachées des cours (<span class="reponse-cachee">) : un clic ou un toucher les révèle.
+document.addEventListener('click', e => {
+    const cachee = e.target.closest?.('.reponse-cachee');
+    if (cachee) cachee.classList.add('revelee');
+});
+
 function suivreModificationsEditeur() {
     editeurModifie = false;
     const container = document.getElementById('main-container');
