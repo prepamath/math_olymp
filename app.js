@@ -550,7 +550,11 @@ function attacherEvenementsExercice(secKey, chap, exo) {
                 ? `✨ Bravo ! C'est exact (exercice déjà résolu : pas de points supplémentaires).`
                 : `✨ Bravo ! C'est exact (+${res.points} points).`, true);
         } else {
-            afficherFeedback(feedback, `Ce n'est pas la bonne réponse. ${res.indice ? '<br>💡 <b>Indice :</b> ' + res.indice : ''}`, false);
+            // Le serveur n'envoie l'indice qu'à partir du deuxième essai faux
+            const complement = res.indice
+                ? '<br>💡 <b>Indice :</b> ' + res.indice
+                : (res.indice_bientot ? '<br>💡 Un indice vous sera proposé si votre prochain essai est faux.' : '');
+            afficherFeedback(feedback, `Ce n'est pas la bonne réponse. ${complement}`, false);
         }
 
         await Promise.all([chargerProgressionEleve(), chargerStatistiques()]);
