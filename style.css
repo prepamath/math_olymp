@@ -168,7 +168,8 @@ table.score-table th { background: var(--card-dark); }
 /* Réponse cachée dans un cours : visible au survol, au focus ou après un toucher */
 .reponse-cachee { background: var(--bouton-hover); border-radius: 4px; padding: 0 6px; cursor: pointer; }
 .reponse-cachee:not(:hover):not(:focus):not(.revelee) { color: transparent; user-select: none; }
-.reponse-cachee:not(:hover):not(:focus):not(.revelee) .katex { visibility: hidden; }
+.reponse-cachee:not(:hover):not(:focus):not(.revelee) .katex,
+.reponse-cachee:not(:hover):not(:focus):not(.revelee) svg { visibility: hidden; }
 .reponse-cachee.revelee, .reponse-cachee:hover, .reponse-cachee:focus { background: var(--bouton); outline: none; }
 
 /* Tableaux et formulaires Admin */
