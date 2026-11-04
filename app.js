@@ -413,10 +413,35 @@ function afficherExercice(secKey, chapId, exoId) {
         <div id="feedback-exo" class="feedback-box ${dejaReussi ? 'correct' : ''}" style="${dejaReussi ? 'display:block' : ''}">
             ${dejaReussi ? '✨ Vous avez déjà résolu cet exercice avec succès ! Vous pouvez y répondre à nouveau pour vous entraîner (sans points supplémentaires).' : ''}
         </div>
+        <div id="solution-exo" data-exo="${exo.id}"></div>
     `);
 
     attacherEvenementsExercice(secKey, chap, exo);
-    if (!dejaReussi) chargerEtatExercice(exo.id);
+    if (dejaReussi) chargerSolutionExercice(exo.id);
+    else chargerEtatExercice(exo.id);
+}
+
+// Le corrigé n'est jamais envoyé avec le site : le serveur ne le donne qu'après une bonne réponse.
+async function chargerSolutionExercice(exoId) {
+    const { data } = await db.rpc('solution_exercice', { p_exo_id: exoId });
+    afficherSolution(exoId, data);
+}
+
+function afficherSolution(exoId, solution) {
+    const zone = document.getElementById('solution-exo');
+    // L'élève a pu changer d'exercice pendant le chargement
+    if (!zone || zone.dataset.exo !== exoId || !solution) return;
+    zone.innerHTML = `
+        <div class="solution-box">
+            <h3>Solution</h3>
+            <div class="solution-contenu">${solution}</div>
+        </div>
+    `;
+    if (window.renderMathInElement) {
+        renderMathInElement(zone, {
+            delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}]
+        });
+    }
 }
 
 async function chargerEtatExercice(exoId) {
@@ -557,6 +582,7 @@ function attacherEvenementsExercice(secKey, chap, exo) {
             afficherFeedback(feedback, dejaReussi
                 ? `✨ Bravo ! C'est exact (exercice déjà résolu : pas de points supplémentaires).`
                 : `✨ Bravo ! C'est exact (+${res.points} points).`, true);
+            afficherSolution(exo.id, res.solution);
         } else {
             // Le serveur n'envoie l'indice qu'à partir du deuxième essai faux
             const complement = res.indice
@@ -1042,10 +1068,10 @@ function ouvrirEditeurExercice(idx) {
             </div>
 
             <!-- Énoncé Côte à Côte avec Aperçu -->
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:20px;">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; align-items:end; margin-bottom:20px;">
                 <div>
                     <label style="font-size:0.85rem; color:var(--text-muted);">Énoncé de l'exercice (LaTeX $...$ et $$...$$ acceptés) :</label>
-                    <textarea id="ed-exo-enonce" class="admin-textarea" style="height:130px; margin-top:6px;" oninput="majApercuExo()">${echapperHtml(exo.enonce)}</textarea>
+                    <textarea id="ed-exo-enonce" class="admin-textarea" style="display:block; height:130px; margin:6px 0 0;" oninput="majApercuExo()">${echapperHtml(exo.enonce)}</textarea>
                 </div>
                 <div>
                     <label style="font-size:0.85rem; color:var(--text-muted);">Aperçu de l'énoncé en direct :</label>
@@ -1077,6 +1103,19 @@ function ouvrirEditeurExercice(idx) {
                 <input type="text" id="ed-exo-indice" class="form-input" value="${echapperAttr(exo.indiceErreur || '')}" placeholder="Ex: Pensez à calculer le discriminant Δ = b² - 4ac...">
             </div>
 
+            <!-- Corrigé Côte à Côte avec Aperçu -->
+            <label style="display:block; font-size:0.9rem; margin-bottom:6px;">📝 Solution (facultatif) : affichée sous l'exercice une fois qu'il est réussi</label>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; align-items:end; margin-bottom:20px;">
+                <div>
+                    <label style="font-size:0.85rem; color:var(--text-muted);">Rédaction (HTML et LaTeX acceptés) :</label>
+                    <textarea id="ed-exo-solution" class="admin-textarea" style="display:block; height:160px; margin:6px 0 0;" oninput="majApercuExo()">${echapperHtml(exo.solution || '')}</textarea>
+                </div>
+                <div>
+                    <label style="font-size:0.85rem; color:var(--text-muted);">Aperçu de la solution :</label>
+                    <div id="ed-exo-apercu-solution" style="height:160px; overflow-y:auto; background:var(--bg-dark); border:1px solid var(--border-color); border-radius:8px; padding:15px; margin-top:6px;"></div>
+                </div>
+            </div>
+
             <button class="btn-primary" onclick="enregistrerExercice(${idx}, '${exo.id}', ${exo.numero})">💾 Enregistrer cet exercice</button>
         </div>
     `;
@@ -1091,14 +1130,15 @@ function basculerFormatExo() {
 }
 
 function majApercuExo() {
-    const code = document.getElementById('ed-exo-enonce').value;
-    const apercu = document.getElementById('ed-exo-apercu');
-    apercu.innerHTML = code;
-    if (window.renderMathInElement) {
-        renderMathInElement(apercu, {
-            delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}]
-        });
-    }
+    [['ed-exo-enonce', 'ed-exo-apercu'], ['ed-exo-solution', 'ed-exo-apercu-solution']].forEach(([idCode, idApercu]) => {
+        const apercu = document.getElementById(idApercu);
+        apercu.innerHTML = document.getElementById(idCode).value;
+        if (window.renderMathInElement) {
+            renderMathInElement(apercu, {
+                delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}]
+            });
+        }
+    });
 }
 
 async function enregistrerExercice(idx, idExistant, numeroExistant) {
@@ -1107,10 +1147,12 @@ async function enregistrerExercice(idx, idExistant, numeroExistant) {
     const points = parseInt(document.getElementById('ed-exo-pts').value) || 5;
     const enonce = document.getElementById('ed-exo-enonce').value.trim();
     const indiceErreur = document.getElementById('ed-exo-indice').value.trim();
+    const solution = document.getElementById('ed-exo-solution').value.trim();
 
     if (!enonce) return alert("Veuillez écrire un énoncé.");
 
     const nouvelExo = { id: idExistant, numero: numeroExistant, points, type, enonce, indiceErreur };
+    if (solution) nouvelExo.solution = solution;
 
     if (type === 'latex') {
         const rawReps = document.getElementById('ed-exo-reponses').value;
